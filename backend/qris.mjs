@@ -23,7 +23,7 @@ qrisRouter.post("/qris", async (req, res) => {
       if (orders[orderId] && orders[orderId].status === "PENDING") {
         orders[orderId].status = "PAID";
       }
-    }, 10000);
+    }, 5000);
 
     res.json({ success: true, orderId, amount, qrImage });
   } catch (error) {

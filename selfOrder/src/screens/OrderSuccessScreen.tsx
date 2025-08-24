@@ -1,3 +1,4 @@
+// src/screens/OrderSuccessScreen.tsx
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
@@ -5,22 +6,73 @@ import {
   StyleSheet,
   Animated,
   Easing,
+  TouchableOpacity,
+  Alert,
 } from 'react-native';
-import API from '../api/api'; 
+import API from '../api/api';
+import * as Print from 'expo-print';
+import * as Sharing from 'expo-sharing';
+
+// Fungsi untuk generate HTML struk
+const generateStrukHTML = (
+  queueNumber: string,
+  items: { name: string; qty: number; price: number }[],
+  total: number
+) => {
+  const rows = items
+    .map(
+      (item) =>
+        `<tr><td>${item.name}</td><td>${item.qty}</td><td>Rp ${item.price.toLocaleString(
+          'id-ID'
+        )}</td></tr>`
+    )
+    .join('');
+  return `
+  <html>
+  <head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+      body { font-family: Arial, sans-serif; padding: 20px; }
+      h1 { color: #ffcc00; text-align: center; }
+      table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+      td, th { border-bottom: 1px solid #ddd; padding: 8px; text-align: left; }
+      tfoot td { font-weight: bold; }
+    </style>
+  </head>
+  <body>
+    <h1>Order Berhasil!</h1>
+    <p>Nomor Antrian: <strong>${queueNumber}</strong></p>
+    <table>
+      <thead>
+        <tr><th>Item</th><th>Qty</th><th>Harga</th></tr>
+      </thead>
+      <tbody>
+        ${rows}
+      </tbody>
+      <tfoot>
+        <tr><td colspan="2">Total</td><td>Rp ${total.toLocaleString('id-ID')}</td></tr>
+      </tfoot>
+    </table>
+    <p style="text-align:center;margin-top:20px;">Terima kasih telah memesan!</p>
+  </body>
+  </html>
+  `;
+};
 
 export default function OrderSuccessScreen({ route, navigation }: any) {
-  const [queueNumber, setQueueNumber] = useState<string>("001"); 
+  const [queueNumber, setQueueNumber] = useState<string>('001');
   const [countdown, setCountdown] = useState(5);
+  const [isSharing, setIsSharing] = useState(false);
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const progressAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     const fetchQueue = async () => {
       try {
-        const res = await API.post("/api/antrian/next");
-        setQueueNumber(res.data.nextQueue); // <-- sesuaikan dengan backend
+        const res = await API.post('/api/antrian/next');
+        setQueueNumber(res.data.nextQueue); 
       } catch (err) {
-        console.error("Gagal ambil nomor antrian:", err);
+        console.error('Gagal ambil nomor antrian:', err);
       }
     };
     fetchQueue();
@@ -54,6 +106,28 @@ export default function OrderSuccessScreen({ route, navigation }: any) {
     outputRange: ['0%', '100%'],
   });
 
+  const handleGeneratePDF = async () => {
+    if (isSharing) return;
+    setIsSharing(true);
+    try {
+      // Contoh items, sesuaikan dengan keranjang sebenarnya
+      const items = [
+        { name: 'Donat Coklat', qty: 2, price: 10000 },
+        { name: 'Donat Keju', qty: 1, price: 12000 },
+      ];
+      const total = items.reduce((acc, i) => acc + i.qty * i.price, 0);
+
+      const html = generateStrukHTML(queueNumber, items, total);
+      const { uri } = await Print.printToFileAsync({ html });
+      await Sharing.shareAsync(uri);
+    } catch (e) {
+      console.error(e);
+      Alert.alert('Error', 'Gagal membuat PDF');
+    } finally {
+      setIsSharing(false);
+    }
+  };
+
   return (
     <View style={styles.container}>
       <Animated.View style={[styles.card, { opacity: fadeAnim }]}>
@@ -68,6 +142,17 @@ export default function OrderSuccessScreen({ route, navigation }: any) {
         </View>
 
         <Text style={styles.countdown}>Kembali dalam {countdown}</Text>
+
+        {/* Tombol cetak / share PDF */}
+        <TouchableOpacity
+          style={[styles.pdfBtn, isSharing && { opacity: 0.6 }]}
+          onPress={handleGeneratePDF}
+          disabled={isSharing}
+        >
+          <Text style={styles.pdfBtnText}>
+            {isSharing ? 'Sedang Membuka...' : 'Cetak / Bagikan Struk'}
+          </Text>
+        </TouchableOpacity>
       </Animated.View>
     </View>
   );
@@ -131,5 +216,18 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#666',
     fontWeight: '600',
+  },
+  pdfBtn: {
+    marginTop: 20,
+    backgroundColor: '#ffcc00',
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  pdfBtnText: {
+    fontWeight: 'bold',
+    fontSize: 16,
+    color: '#111',
   },
 });
